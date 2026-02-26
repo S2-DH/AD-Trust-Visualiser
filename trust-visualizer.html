@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Domain Trust Mapping Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #080c10;
+    --surface: #0d1219;
+    --surface2: #121820;
+    --border: #1e2d3d;
+    --border2: #243040;
+    --cyan: #00d4ff;
+    --cyan-dim: #00a0c0;
+    --red: #ff3c5a;
+    --orange: #ff8c42;
+    --green: #00e676;
+    --yellow: #ffd740;
+    --purple: #b06bff;
+    --text: #c8d6e8;
+    --text-dim: #5a7a9a;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,0.012) 2px, rgba(0,212,255,0.012) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--cyan);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  .logo-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+  }
+
+  .header-stats {
+    display: flex;
+    gap: 20px;
+  }
+
+  .stat-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .stat-pill .val {
+    color: var(--cyan);
+    font-size: 16px;
+    font-weight: bold;
+  }
+
+  /* Layout */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    border-bottom: 1px solid var(--border);
+    padding: 14px;
+  }
+
+  .sidebar-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--cyan-dim);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sidebar-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Input area */
+  textarea {
+    width: 100%;
+    height: 140px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 10px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus { border-color: var(--cyan-dim); }
+  textarea::placeholder { color: var(--text-dim); }
+
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  button {
+    flex: 1;
+    padding: 7px 10px;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border: 1px solid;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    outline: none;
+  }
+
+  .btn-primary {
+    background: var(--cyan);
+    border-color: var(--cyan);
+    color: var(--bg);
+  }
+
+  .btn-primary:hover { background: #00f0ff; box-shadow: 0 0 12px rgba(0,212,255,0.4); }
+
+  .btn-secondary {
+    background: transparent;
+    border-color: var(--border2);
+    color: var(--text-dim);
+  }
+
+  .btn-secondary:hover { border-color: var(--cyan-dim); color: var(--text); }
+
+  .btn-danger {
+    background: transparent;
+    border-color: var(--red);
+    color: var(--red);
+    flex: 0 0 auto;
+    padding: 7px 12px;
+  }
+
+  .btn-danger:hover { background: rgba(255,60,90,0.15); }
+
+  /* File drop zone */
+  .drop-zone {
+    border: 1px dashed var(--border2);
+    border-radius: 4px;
+    padding: 10px;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 6px;
+  }
+
+  .drop-zone:hover { border-color: var(--cyan-dim); color: var(--text); }
+  .drop-zone.drag-over { border-color: var(--cyan); background: rgba(0,212,255,0.05); }
+
+  /* Legend */
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-line {
+    width: 24px; height: 2px;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .control-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    width: 70px;
+    flex-shrink: 0;
+  }
+
+  input[type=range] {
+    flex: 1;
+    accent-color: var(--cyan);
+    height: 3px;
+  }
+
+  .range-val {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--cyan);
+    width: 32px;
+    text-align: right;
+  }
+
+  /* Filter checkboxes */
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .filter-item input[type=checkbox] { accent-color: var(--cyan); }
+
+  /* Info panel */
+  .info-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .info-panel::-webkit-scrollbar { width: 4px; }
+  .info-panel::-webkit-scrollbar-track { background: transparent; }
+  .info-panel::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  .node-info {
+    display: none;
+  }
+
+  .node-info.visible {
+    display: block;
+  }
+
+  .info-domain {
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 4px;
+    word-break: break-all;
+  }
+
+  .info-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 10px;
+    margin-bottom: 12px;
+  }
+
+  .trust-row {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .trust-target {
+    color: white;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+
+  .trust-meta {
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
+  .trust-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 9px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 30px 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.8;
+  }
+
+  .empty-state code {
+    color: var(--cyan);
+    display: block;
+    margin-top: 10px;
+    font-size: 10px;
+  }
+
+  /* Main graph area */
+  .graph-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    max-width: 280px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+
+  .tooltip.visible { opacity: 1; }
+  .tooltip-title { color: white; font-size: 13px; margin-bottom: 4px; font-family: var(--sans); font-weight: 700; }
+  .tooltip-row { color: var(--text-dim); margin: 2px 0; }
+  .tooltip-row span { color: var(--cyan); }
+
+  /* Graph controls overlay */
+  .graph-controls {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .gc-btn {
+    width: 32px; height: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    font-family: var(--mono);
+  }
+
+  .gc-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* Status bar */
+  .status-bar {
+    height: 24px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 20px;
+    flex-shrink: 0;
+  }
+
+  .status-item {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+
+  /* Error toast */
+  .toast {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    background: rgba(255,60,90,0.2);
+    border: 1px solid var(--red);
+    color: var(--red);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 999;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* D3 elements */
+  .node circle {
+    cursor: pointer;
+    transition: stroke-width 0.15s;
+  }
+
+  .node circle:hover { stroke-width: 3px !important; }
+  .node text { cursor: pointer; pointer-events: none; }
+  .node.selected circle { stroke-width: 3px !important; }
+
+  .link { stroke-opacity: 0.7; }
+
+  /* Grid background */
+  .grid-bg {
+    stroke: rgba(30,45,61,0.6);
+    stroke-width: 1;
+  }
+
+  /* Arrow markers defined in SVG defs */
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🕸</div>
+    <div>
+      <div class="logo-text">TrustViz</div>
+      <div class="logo-sub">DOMAIN TRUST MAPPING VISUALIZER</div>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="stat-pill"><span class="val" id="h-domains">0</span>DOMAINS</div>
+    <div class="stat-pill"><span class="val" id="h-trusts">0</span>TRUSTS</div>
+    <div class="stat-pill"><span class="val" id="h-forests">0</span>FORESTS</div>
+    <div class="stat-pill"><span class="val" id="h-bidir">0</span>BIDIR</div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Input Data</div>
+      <textarea id="inputData" placeholder="Paste Get-DomainTrustMapping output here...
+
+Accepts:
+• Raw PowerView text output
+• CSV export (with headers)
+• TSV (tab-separated)
+
+Example (raw):
+SourceName   : corp.local
+TargetName   : child.corp.local
+TrustType    : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : WITHIN_FOREST
+TrustDirection : Bidirectional"></textarea>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="parseAndRender()">▶ Render</button>
+        <button class="btn-secondary" onclick="loadSample()">Sample</button>
+        <button class="btn-danger" onclick="clearAll()">✕</button>
+      </div>
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        📂 Drop CSV / TSV file here or click to browse
+      </div>
+      <input type="file" id="fileInput" style="display:none" accept=".csv,.tsv,.txt" onchange="handleFile(this)">
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Legend</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00d4ff"></div>Root / Source Domain</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00e676"></div>Child Domain (same forest)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffd740"></div>External Domain</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff8c42"></div>Forest Trust</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff3c5a"></div>MIT / Cross-Realm</div>
+      <div style="height:8px"></div>
+      <div class="legend-item">
+        <svg width="24" height="12" style="flex-shrink:0"><line x1="0" y1="6" x2="24" y2="6" stroke="#00d4ff" stroke-width="2"/><circle cx="20" cy="6" r="3" fill="#00d4ff"/></svg>
+        Outbound (→)
+      </div>
+      <div class="legend-item">
+        <svg width="24" height="12" style="flex-shrink:0"><line x1="0" y1="6" x2="24" y2="6" stroke="#ffd740" stroke-width="2" stroke-dasharray="4,2"/></svg>
+        Inbound (←)
+      </div>
+      <div class="legend-item">
+        <svg width="24" height="12" style="flex-shrink:0"><line x1="0" y1="6" x2="24" y2="6" stroke="#00e676" stroke-width="2.5"/><circle cx="4" cy="6" r="3" fill="#00e676"/><circle cx="20" cy="6" r="3" fill="#00e676"/></svg>
+        Bidirectional (↔)
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Controls</div>
+      <div class="controls">
+        <div class="control-row">
+          <div class="control-label">Link Force</div>
+          <input type="range" id="linkStrength" min="10" max="300" value="100" oninput="updateForce()">
+          <div class="range-val" id="linkStrengthVal">100</div>
+        </div>
+        <div class="control-row">
+          <div class="control-label">Repulsion</div>
+          <input type="range" id="repulsion" min="-800" max="-50" value="-300" oninput="updateForce()">
+          <div class="range-val" id="repulsionVal">-300</div>
+        </div>
+        <div class="control-row">
+          <div class="control-label">Node Size</div>
+          <input type="range" id="nodeSize" min="8" max="30" value="16" oninput="updateNodeSize()">
+          <div class="range-val" id="nodeSizeVal">16</div>
+        </div>
+        <div class="control-row">
+          <div class="control-label">Label Size</div>
+          <input type="range" id="labelSize" min="8" max="16" value="11" oninput="updateLabelSize()">
+          <div class="range-val" id="labelSizeVal">11</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Node info / selected details -->
+    <div class="info-panel">
+      <div class="node-info" id="nodeInfo">
+        <div class="sidebar-label">Selected Domain</div>
+        <div class="info-domain" id="infoDomain"></div>
+        <div id="infoTag"></div>
+        <div id="infoTrusts"></div>
+      </div>
+      <div class="empty-state" id="emptyState">
+        <div>Paste PowerView output<br>and click Render</div>
+        <div style="margin-top:12px;font-size:9px;line-height:2">
+          <code>Get-DomainTrustMapping | Export-Csv trusts.csv</code>
+          <code>Get-DomainTrustMapping | Format-List</code>
+          <code>Get-DomainTrust | Format-List</code>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Graph Area -->
+  <div class="graph-area" id="graphArea">
+    <svg id="mainSvg">
+      <defs>
+        <marker id="arrow-cyan" markerWidth="8" markerHeight="8" refX="16" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#00d4ff"/>
+        </marker>
+        <marker id="arrow-yellow" markerWidth="8" markerHeight="8" refX="16" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#ffd740"/>
+        </marker>
+        <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="16" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#00e676"/>
+        </marker>
+        <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="16" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#ff8c42"/>
+        </marker>
+        <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="16" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#ff3c5a"/>
+        </marker>
+        <filter id="glow-cyan">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="glow-red">
+          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g id="grid"></g>
+      <g id="graphRoot">
+        <g id="linksGroup"></g>
+        <g id="nodesGroup"></g>
+      </g>
+    </svg>
+
+    <div class="graph-controls">
+      <div class="gc-btn" onclick="zoomIn()" title="Zoom In">+</div>
+      <div class="gc-btn" onclick="zoomOut()" title="Zoom Out">−</div>
+      <div class="gc-btn" onclick="zoomFit()" title="Fit View">⊡</div>
+      <div class="gc-btn" onclick="toggleLabels()" title="Toggle Labels" id="labelToggle">A</div>
+    </div>
+
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+</div>
+
+<div class="status-bar">
+  <div class="status-item"><div class="status-dot" id="statusDot" style="background:#1e2d3d"></div><span id="statusText">No data loaded</span></div>
+  <div class="status-item" id="statusDrag" style="display:none">Drag nodes · Scroll to zoom · Click to inspect</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let graphData = { nodes: [], links: [] };
+let simulation = null;
+let zoomBehavior = null;
+let showLabels = true;
+let selectedNode = null;
+
+// ============================================================
+// SAMPLE DATA
+// ============================================================
+const SAMPLE = `SourceName      : corp.local
+TargetName      : child.corp.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : WITHIN_FOREST
+TrustDirection  : Bidirectional
+WhenCreated     : 1/15/2019 9:00:00 AM
+WhenChanged     : 3/12/2024 2:15:00 PM
+
+SourceName      : corp.local
+TargetName      : dev.corp.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : WITHIN_FOREST
+TrustDirection  : Bidirectional
+WhenCreated     : 6/20/2020 11:30:00 AM
+WhenChanged     : 1/8/2024 10:22:00 AM
+
+SourceName      : corp.local
+TargetName      : partner-ext.com
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : FOREST_TRANSITIVE
+TrustDirection  : Bidirectional
+WhenCreated     : 9/3/2021 3:45:00 PM
+WhenChanged     : 12/1/2023 8:00:00 AM
+
+SourceName      : corp.local
+TargetName      : legacy-acq.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : NON_TRANSITIVE
+TrustDirection  : Outbound
+WhenCreated     : 4/10/2017 7:15:00 AM
+WhenChanged     : 11/5/2022 4:30:00 PM
+
+SourceName      : child.corp.local
+TargetName      : corp.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : WITHIN_FOREST
+TrustDirection  : Bidirectional
+
+SourceName      : child.corp.local
+TargetName      : subchild.child.corp.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : WITHIN_FOREST
+TrustDirection  : Bidirectional
+
+SourceName      : dev.corp.local
+TargetName      : corp.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : WITHIN_FOREST
+TrustDirection  : Bidirectional
+
+SourceName      : partner-ext.com
+TargetName      : corp.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : FOREST_TRANSITIVE
+TrustDirection  : Bidirectional
+
+SourceName      : partner-ext.com
+TargetName      : sub.partner-ext.com
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : WITHIN_FOREST
+TrustDirection  : Bidirectional
+
+SourceName      : legacy-acq.local
+TargetName      : corp.local
+TrustType       : WINDOWS_ACTIVE_DIRECTORY
+TrustAttributes : NON_TRANSITIVE
+TrustDirection  : Inbound`;
+
+// ============================================================
+// PARSING
+// ============================================================
+function parseInput(raw) {
+  raw = raw.trim();
+  if (!raw) return null;
+
+  // Try CSV
+  if (raw.includes(',') && raw.toLowerCase().includes('sourcename')) {
+    return parseCSV(raw);
+  }
+  // Try TSV
+  if (raw.includes('\t') && raw.toLowerCase().includes('sourcename')) {
+    return parseCSV(raw, '\t');
+  }
+  // Raw PowerView
+  return parsePowerView(raw);
+}
+
+function parsePowerView(raw) {
+  const records = [];
+  // Split on blank lines or new record starting with SourceName
+  const blocks = raw.split(/\n\s*\n+/);
+  
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+    const rec = {};
+    const lines = block.split('\n');
+    for (const line of lines) {
+      const match = line.match(/^\s*(\w+)\s*:\s*(.+)$/);
+      if (match) {
+        rec[match[1].toLowerCase().trim()] = match[2].trim();
+      }
+    }
+    if (rec.sourcename && rec.targetname) {
+      records.push({
+        SourceName: rec.sourcename,
+        TargetName: rec.targetname,
+        TrustType: rec.trusttype || 'WINDOWS_ACTIVE_DIRECTORY',
+        TrustAttributes: rec.trustattributes || '',
+        TrustDirection: rec.trustdirection || 'Bidirectional',
+        WhenCreated: rec.whencreated || '',
+        WhenChanged: rec.whenchanged || ''
+      });
+    }
+  }
+  return records.length ? records : null;
+}
+
+function parseCSV(raw, sep) {
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return null;
+  
+  // Auto-detect separator
+  if (!sep) {
+    sep = lines[0].includes('\t') ? '\t' : ',';
+  }
+  
+  const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g,'').trim());
+  const records = [];
+  
+  // Find column indices case-insensitively
+  const idx = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+  const srcIdx = idx('SourceName') !== -1 ? idx('SourceName') : idx('source');
+  const tgtIdx = idx('TargetName') !== -1 ? idx('TargetName') : idx('target');
+  
+  if (srcIdx === -1 || tgtIdx === -1) return null;
+  
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(sep).map(c => c.replace(/^"|"$/g,'').trim());
+    if (!cols[srcIdx] || !cols[tgtIdx]) continue;
+    records.push({
+      SourceName: cols[srcIdx],
+      TargetName: cols[tgtIdx],
+      TrustType: cols[idx('TrustType')] || cols[idx('trusttype')] || 'WINDOWS_ACTIVE_DIRECTORY',
+      TrustAttributes: cols[idx('TrustAttributes')] || cols[idx('trustattributes')] || '',
+      TrustDirection: cols[idx('TrustDirection')] || cols[idx('trustdirection')] || 'Bidirectional',
+      WhenCreated: cols[idx('WhenCreated')] || '',
+      WhenChanged: cols[idx('WhenChanged')] || ''
+    });
+  }
+  return records.length ? records : null;
+}
+
+// ============================================================
+// BUILD GRAPH DATA
+// ============================================================
+function buildGraph(records) {
+  const nodeMap = {};
+  const links = [];
+
+  function getOrCreate(name) {
+    if (!nodeMap[name]) {
+      nodeMap[name] = { id: name, trustCount: 0, trustsOut: [], trustsIn: [] };
+    }
+    return nodeMap[name];
+  }
+
+  for (const r of records) {
+    const src = r.SourceName.toLowerCase();
+    const tgt = r.TargetName.toLowerCase();
+    getOrCreate(src);
+    getOrCreate(tgt);
+    nodeMap[src].trustCount++;
+    nodeMap[tgt].trustCount++;
+    
+    const dir = (r.TrustDirection || '').toLowerCase();
+    const attr = (r.TrustAttributes || '').toLowerCase();
+    
+    // Classify trust type
+    let trustClass = 'external';
+    if (attr.includes('within_forest')) trustClass = 'forest-child';
+    else if (attr.includes('forest_transitive')) trustClass = 'forest';
+    else if (attr.includes('mit') || (r.TrustType || '').toLowerCase().includes('mit')) trustClass = 'mit';
+    else if (attr.includes('non_transitive')) trustClass = 'external';
+    
+    links.push({
+      source: src,
+      target: tgt,
+      direction: dir,
+      trustType: r.TrustType || '',
+      trustAttributes: r.TrustAttributes || '',
+      trustClass,
+      whenCreated: r.WhenCreated,
+      whenChanged: r.WhenChanged,
+      raw: r
+    });
+    
+    // Track trust relationships on nodes
+    nodeMap[src].trustsOut.push({ domain: tgt, direction: dir, class: trustClass, attr: r.TrustAttributes });
+    nodeMap[tgt].trustsIn.push({ domain: src, direction: dir, class: trustClass, attr: r.TrustAttributes });
+  }
+
+  // Classify nodes
+  const domains = Object.values(nodeMap);
+  
+  // Root domains: have the most outbound trusts or are source but not pure child
+  for (const node of domains) {
+    const name = node.id;
+    const isChild = links.some(l => l.target === name && l.trustClass === 'forest-child');
+    const hasForest = links.some(l => (l.source === name || l.target === name) && l.trustClass === 'forest');
+    
+    if (!isChild || node.trustsOut.length > 2) {
+      node.type = hasForest ? 'forest-root' : 'root';
+    } else if (isChild && links.some(l => l.source === name && l.trustClass === 'forest-child')) {
+      node.type = 'child';
+    } else {
+      node.type = 'child';
+    }
+    
+    // Reconsider: if this node only appears as a target of forest-child and never a source of non-child trusts, it's external
+    const allForest = links.filter(l => l.source === name || l.target === name);
+    const hasExternal = allForest.some(l => l.trustClass !== 'forest-child');
+    
+    if (!links.some(l => l.source === name && l.trustClass === 'forest-child') &&
+        !links.some(l => l.target === name && l.trustClass === 'forest-child') && hasExternal) {
+      node.type = 'external';
+    }
+  }
+  
+  return {
+    nodes: domains,
+    links: links
+  };
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function nodeColor(type) {
+  switch(type) {
+    case 'root': return '#00d4ff';
+    case 'forest-root': return '#00d4ff';
+    case 'child': return '#00e676';
+    case 'forest': return '#ff8c42';
+    case 'external': return '#ffd740';
+    case 'mit': return '#ff3c5a';
+    default: return '#aaa';
+  }
+}
+
+function linkColor(link) {
+  switch(link.trustClass) {
+    case 'forest-child': return '#00e676';
+    case 'forest': return '#ff8c42';
+    case 'mit': return '#ff3c5a';
+    default: return '#00d4ff';
+  }
+}
+
+function arrowId(link) {
+  switch(link.trustClass) {
+    case 'forest-child': return 'url(#arrow-green)';
+    case 'forest': return 'url(#arrow-orange)';
+    case 'mit': return 'url(#arrow-red)';
+    default: return 'url(#arrow-cyan)';
+  }
+}
+
+function renderGraph(data) {
+  graphData = data;
+  const svg = d3.select('#mainSvg');
+  const area = document.getElementById('graphArea');
+  const W = area.clientWidth;
+  const H = area.clientHeight;
+
+  // Clear previous
+  d3.select('#linksGroup').selectAll('*').remove();
+  d3.select('#nodesGroup').selectAll('*').remove();
+  if (simulation) simulation.stop();
+
+  // Draw grid
+  const gridG = d3.select('#grid');
+  gridG.selectAll('*').remove();
+  const gridSize = 40;
+  for (let x = 0; x < W * 2; x += gridSize) {
+    gridG.append('line').attr('class','grid-bg').attr('x1',x).attr('y1',0).attr('x2',x).attr('y2',H*2);
+  }
+  for (let y = 0; y < H * 2; y += gridSize) {
+    gridG.append('line').attr('class','grid-bg').attr('x1',0).attr('y1',y).attr('x2',W*2).attr('y2',y);
+  }
+
+  // Zoom
+  zoomBehavior = d3.zoom()
+    .scaleExtent([0.1, 4])
+    .on('zoom', (e) => {
+      d3.select('#graphRoot').attr('transform', e.transform);
+    });
+  svg.call(zoomBehavior);
+  svg.call(zoomBehavior.transform, d3.zoomIdentity.translate(W/2, H/2));
+
+  // Build simulation
+  const nodeSize = +document.getElementById('nodeSize').value;
+  const repulsion = +document.getElementById('repulsion').value;
+  const linkDist = +document.getElementById('linkStrength').value;
+
+  simulation = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.links).id(d => d.id).distance(linkDist).strength(0.8))
+    .force('charge', d3.forceManyBody().strength(repulsion))
+    .force('center', d3.forceCenter(0, 0))
+    .force('collision', d3.forceCollide().radius(nodeSize + 10));
+
+  // Links
+  const linkG = d3.select('#linksGroup');
+  
+  const linkSel = linkG.selectAll('.link-group')
+    .data(data.links)
+    .join('g')
+    .attr('class', 'link-group');
+
+  const line = linkSel.append('line')
+    .attr('class', 'link')
+    .attr('stroke', d => linkColor(d))
+    .attr('stroke-width', d => d.trustClass === 'forest-child' ? 2 : 1.5)
+    .attr('stroke-dasharray', d => {
+      const dir = d.direction;
+      if (dir.includes('inbound') && !dir.includes('bidirectional')) return '5,3';
+      return 'none';
+    })
+    .attr('marker-end', d => {
+      const dir = d.direction;
+      if (dir.includes('outbound') || dir.includes('bidirectional')) return arrowId(d);
+      return 'none';
+    })
+    .attr('marker-start', d => {
+      const dir = d.direction;
+      if (dir.includes('bidirectional')) return arrowId(d);
+      return 'none';
+    });
+
+  // Nodes
+  const nodeG = d3.select('#nodesGroup');
+  const tooltip = document.getElementById('tooltip');
+
+  const node = nodeG.selectAll('.node')
+    .data(data.nodes)
+    .join('g')
+    .attr('class', 'node')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+    )
+    .on('click', (e, d) => {
+      e.stopPropagation();
+      selectNode(d);
+    })
+    .on('mouseover', (e, d) => {
+      const dir = (d.trustsOut.length > 0 ? `→ ${d.trustsOut.length} outbound` : '') + 
+                  (d.trustsIn.length > 0 ? ` ← ${d.trustsIn.length} inbound` : '');
+      tooltip.innerHTML = `
+        <div class="tooltip-title">${d.id}</div>
+        <div class="tooltip-row">Type: <span>${d.type || 'domain'}</span></div>
+        <div class="tooltip-row">Trusts: <span>${dir || 'isolated'}</span></div>
+      `;
+      tooltip.classList.add('visible');
+    })
+    .on('mousemove', (e) => {
+      const area = document.getElementById('graphArea').getBoundingClientRect();
+      let x = e.clientX - area.left + 12;
+      let y = e.clientY - area.top + 12;
+      if (x + 200 > area.width) x -= 220;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = y + 'px';
+    })
+    .on('mouseleave', () => tooltip.classList.remove('visible'));
+
+  // Outer ring (glow) for high-value nodes
+  node.append('circle')
+    .attr('r', d => nodeSize + 4)
+    .attr('fill', 'none')
+    .attr('stroke', d => nodeColor(d.type))
+    .attr('stroke-width', 0.5)
+    .attr('stroke-opacity', 0.3);
+
+  // Main circle
+  node.append('circle')
+    .attr('r', nodeSize)
+    .attr('fill', d => nodeColor(d.type) + '22')
+    .attr('stroke', d => nodeColor(d.type))
+    .attr('stroke-width', 1.5)
+    .attr('filter', d => d.type === 'root' || d.type === 'forest-root' ? 'url(#glow-cyan)' : 'none');
+
+  // Icon
+  node.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'middle')
+    .attr('font-size', nodeSize * 0.9)
+    .attr('y', 0.5)
+    .text(d => {
+      switch(d.type) {
+        case 'root': return '🏛';
+        case 'forest-root': return '🏰';
+        case 'child': return '🏢';
+        case 'external': return '🌐';
+        case 'forest': return '🌲';
+        case 'mit': return '🔑';
+        default: return '💻';
+      }
+    });
+
+  // Labels
+  node.append('text')
+    .attr('class', 'node-label')
+    .attr('y', nodeSize + 14)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#c8d6e8')
+    .attr('font-family', "'Share Tech Mono', monospace")
+    .attr('font-size', +document.getElementById('labelSize').value)
+    .text(d => d.id)
+    .style('display', showLabels ? '' : 'none');
+
+  // Tick
+  simulation.on('tick', () => {
+    line
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  // Click on background to deselect
+  svg.on('click', () => { selectedNode = null; clearInfoPanel(); });
+
+  // Update stats
+  const domains = new Set(data.nodes.map(n => n.id));
+  const bidir = data.links.filter(l => l.direction.toLowerCase().includes('bidirectional')).length;
+  const forests = new Set(data.links.filter(l => l.trustClass === 'forest').flatMap(l => [l.source.id || l.source, l.target.id || l.target])).size;
+  
+  document.getElementById('h-domains').textContent = data.nodes.length;
+  document.getElementById('h-trusts').textContent = data.links.length;
+  document.getElementById('h-forests').textContent = Math.floor(forests / 2);
+  document.getElementById('h-bidir').textContent = bidir;
+  
+  document.getElementById('statusDot').style.background = '#00e676';
+  document.getElementById('statusText').textContent = `${data.nodes.length} domains · ${data.links.length} trusts loaded`;
+  document.getElementById('statusDrag').style.display = 'flex';
+  document.getElementById('emptyState').style.display = 'none';
+}
+
+function selectNode(d) {
+  selectedNode = d;
+  
+  // Visual selection
+  d3.selectAll('.node').classed('selected', n => n.id === d.id);
+  d3.selectAll('.node circle:nth-child(2)').attr('stroke-width', n => n.id === d.id ? 3 : 1.5);
+  
+  // Info panel
+  document.getElementById('nodeInfo').classList.add('visible');
+  document.getElementById('infoDomain').textContent = d.id;
+  
+  const typeColors = {
+    root: '#00d4ff', 'forest-root': '#00d4ff', child: '#00e676',
+    external: '#ffd740', forest: '#ff8c42', mit: '#ff3c5a'
+  };
+  const col = typeColors[d.type] || '#aaa';
+  document.getElementById('infoTag').innerHTML = `<div class="info-tag" style="background:${col}22;color:${col};border:1px solid ${col}44;margin-bottom:12px">${(d.type || 'domain').toUpperCase().replace('-',' ')}</div>`;
+  
+  // Build trust list
+  const allTrusts = graphData.links.filter(l => 
+    (l.source.id || l.source) === d.id || (l.target.id || l.target) === d.id
+  );
+  
+  const dirColors = { 'bidirectional': '#00e676', 'outbound': '#00d4ff', 'inbound': '#ffd740' };
+  
+  let html = `<div class="sidebar-label" style="margin-bottom:8px">Trust Relationships <span style="color:${col}">(${allTrusts.length})</span></div>`;
+  
+  for (const t of allTrusts) {
+    const isSrc = (t.source.id || t.source) === d.id;
+    const other = isSrc ? (t.target.id || t.target) : (t.source.id || t.source);
+    const dir = (t.direction || '').toLowerCase();
+    const dirColor = dirColors[dir] || '#aaa';
+    const arrow = dir.includes('bidirectional') ? '↔' : (isSrc ? '→' : '←');
+    html += `<div class="trust-row">
+      <div class="trust-target">${arrow} ${other}</div>
+      <div class="trust-meta">
+        <span class="trust-badge" style="background:${dirColor}22;color:${dirColor}">${t.direction || 'Unknown'}</span>
+        <span class="trust-badge" style="background:#1e2d3d;color:#5a7a9a">${t.trustAttributes || t.trustType || 'N/A'}</span>
+      </div>
+    </div>`;
+  }
+  
+  document.getElementById('infoTrusts').innerHTML = html;
+}
+
+function clearInfoPanel() {
+  document.getElementById('nodeInfo').classList.remove('visible');
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.node circle:nth-child(2)').attr('stroke-width', 1.5);
+}
+
+// ============================================================
+// FORCE CONTROLS
+// ============================================================
+function updateForce() {
+  const ls = +document.getElementById('linkStrength').value;
+  const rep = +document.getElementById('repulsion').value;
+  document.getElementById('linkStrengthVal').textContent = ls;
+  document.getElementById('repulsionVal').textContent = rep;
+  if (!simulation) return;
+  simulation.force('link').distance(ls);
+  simulation.force('charge').strength(rep);
+  simulation.alpha(0.3).restart();
+}
+
+function updateNodeSize() {
+  const v = +document.getElementById('nodeSize').value;
+  document.getElementById('nodeSizeVal').textContent = v;
+  d3.selectAll('.node circle:nth-child(2)').attr('r', v);
+  d3.selectAll('.node circle:nth-child(1)').attr('r', v + 4);
+  d3.selectAll('.node text:nth-child(3)').attr('y', v + 14).attr('font-size', v * 0.9);
+  d3.selectAll('.node-label').attr('y', v + 14);
+}
+
+function updateLabelSize() {
+  const v = +document.getElementById('labelSize').value;
+  document.getElementById('labelSizeVal').textContent = v;
+  d3.selectAll('.node-label').attr('font-size', v);
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  d3.selectAll('.node-label').style('display', showLabels ? '' : 'none');
+  document.getElementById('labelToggle').style.color = showLabels ? '' : 'var(--text-dim)';
+}
+
+// ============================================================
+// ZOOM CONTROLS
+// ============================================================
+function zoomIn() {
+  const svg = d3.select('#mainSvg');
+  svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.4);
+}
+
+function zoomOut() {
+  const svg = d3.select('#mainSvg');
+  svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.7);
+}
+
+function zoomFit() {
+  if (!graphData.nodes.length) return;
+  const area = document.getElementById('graphArea');
+  const W = area.clientWidth;
+  const H = area.clientHeight;
+  const svg = d3.select('#mainSvg');
+  
+  const xs = graphData.nodes.map(n => n.x || 0);
+  const ys = graphData.nodes.map(n => n.y || 0);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const dw = maxX - minX + 100;
+  const dh = maxY - minY + 100;
+  const scale = Math.min(0.9, W / dw, H / dh);
+  const tx = W/2 - scale * (minX + maxX)/2;
+  const ty = H/2 - scale * (minY + maxY)/2;
+  
+  svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+}
+
+// ============================================================
+// INPUT HANDLERS
+// ============================================================
+function parseAndRender() {
+  const raw = document.getElementById('inputData').value;
+  const records = parseInput(raw);
+  
+  if (!records || !records.length) {
+    showToast('Could not parse input. Check the format and try again.');
+    return;
+  }
+  
+  const data = buildGraph(records);
+  renderGraph(data);
+}
+
+function loadSample() {
+  document.getElementById('inputData').value = SAMPLE;
+  parseAndRender();
+}
+
+function clearAll() {
+  document.getElementById('inputData').value = '';
+  d3.select('#linksGroup').selectAll('*').remove();
+  d3.select('#nodesGroup').selectAll('*').remove();
+  if (simulation) simulation.stop();
+  graphData = { nodes: [], links: [] };
+  selectedNode = null;
+  document.getElementById('h-domains').textContent = '0';
+  document.getElementById('h-trusts').textContent = '0';
+  document.getElementById('h-forests').textContent = '0';
+  document.getElementById('h-bidir').textContent = '0';
+  document.getElementById('statusDot').style.background = '#1e2d3d';
+  document.getElementById('statusText').textContent = 'No data loaded';
+  document.getElementById('statusDrag').style.display = 'none';
+  document.getElementById('emptyState').style.display = '';
+  document.getElementById('nodeInfo').classList.remove('visible');
+}
+
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('inputData').value = e.target.result;
+    parseAndRender();
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// Drag & drop
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    document.getElementById('inputData').value = ev.target.result;
+    parseAndRender();
+  };
+  reader.readAsText(file);
+});
+
+// Ctrl+Enter to render
+document.getElementById('inputData').addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); parseAndRender(); }
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Resize observer
+const ro = new ResizeObserver(() => {
+  if (graphData.nodes.length) setTimeout(zoomFit, 100);
+});
+ro.observe(document.getElementById('graphArea'));
+</script>
+</body>
+</html>
